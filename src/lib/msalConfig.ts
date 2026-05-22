@@ -51,11 +51,11 @@ export const msalConfig: Configuration = {
 };
 
 export const loginRequest = {
-  // Single scope — yields access_token with aud=NEXT_PUBLIC_ORCH_API_AUDIENCE.
-  // Do NOT add "openid"/"profile"/"offline_access" here: B2C policies emit
-  // refresh_token for the user-flow audience regardless, and adding extra
-  // scopes can cause B2C to return an id_token with aud=SPA instead of an
-  // access_token with aud=API — Phase 01 UAT 2026-05-21 root cause.
+  // Single API access scope — yields access_token with aud=NEXT_PUBLIC_ORCH_API_AUDIENCE.
+  // Do NOT add OIDC standard scopes (id-only / profile / offline-access) here:
+  // B2C policies emit refresh_token for the user-flow audience regardless, and
+  // adding extra scopes can cause B2C to return an id_token with aud=SPA instead
+  // of an access_token with aud=API — Phase 01 UAT 2026-05-21 root cause.
   scopes: [`https://${tenant}.onmicrosoft.com/${apiAud}/access`],
 };
 
