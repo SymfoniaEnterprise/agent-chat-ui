@@ -16,9 +16,12 @@
     "lint": "next lint",
     "lint:fix": "next lint --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
+    "@azure/msal-browser": "^5",
     "@langchain/core": "^1.1.44",
     "@langchain/langgraph": "^1.2.9",
     "@langchain/langgraph-sdk": "^1.8.10",
@@ -66,6 +69,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/uuid": "^10.0.0",
+    "@vitest/coverage-v8": "^4.1.7",
     "autoprefixer": "^10.5.0",
     "dotenv": "^16.5.0",
     "eslint": "^9.39.3",
@@ -80,7 +84,8 @@
     "tailwind-scrollbar": "^4.0.2",
     "tailwindcss": "^4.2.4",
     "typescript": "~5.8.3",
-    "typescript-eslint": "^8.59.1"
+    "typescript-eslint": "^8.59.1",
+    "vitest": "^4.1.7"
   },
   "overrides": {
     "react-is": "^19.0.0-rc-69d4b800-20241021"
