@@ -14,6 +14,7 @@ import {
 } from "@/lib/ensure-tool-responses";
 import { LangGraphLogoSVG } from "../icons/langgraph";
 import { TooltipIconButton } from "./tooltip-icon-button";
+import { AgentSelector } from "../AgentSelector";
 import {
   ArrowDown,
   LoaderCircle,
@@ -325,7 +326,8 @@ export function Thread() {
                   </Button>
                 )}
               </div>
-              <div className="absolute top-2 right-4 flex items-center">
+              <div className="absolute top-2 right-4 flex items-center gap-4">
+                <AgentSelector />
                 <OpenGitHubRepo />
               </div>
             </div>
@@ -371,6 +373,7 @@ export function Thread() {
               </div>
 
               <div className="flex items-center gap-4">
+                <AgentSelector />
                 <div className="flex items-center">
                   <OpenGitHubRepo />
                 </div>
