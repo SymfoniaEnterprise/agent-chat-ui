@@ -13,20 +13,24 @@
 
 import { BrowserCacheLocation, type Configuration } from "@azure/msal-browser";
 
-function requireEnv(name: string): string {
-  const v = process.env[name];
-  if (!v) {
+// Literal property access on process.env is REQUIRED for Next.js to inline
+// NEXT_PUBLIC_* at build time. Dynamic access (process.env[varName]) is NOT
+// inlined — it would return undefined at runtime in the production server
+// bundle (the prior `requireEnv(name)` helper hit exactly this bug — see
+// hot-fix 2026-05-25, root cause in agent-chat-ui pod logs).
+function requireEnv(name: string, value: string | undefined): string {
+  if (!value) {
     throw new Error(
       `${name} is not set — see chat-ui/FORK-NOTES.md for the five required NEXT_PUBLIC_* build args.`,
     );
   }
-  return v;
+  return value;
 }
 
-const tenant = requireEnv("NEXT_PUBLIC_B2C_TENANT"); // symfoniab2ctest
-const policy = requireEnv("NEXT_PUBLIC_B2C_POLICY"); // b2c_1a_signup_signin_dev
-const clientId = requireEnv("NEXT_PUBLIC_B2C_CLIENT_ID"); // a78a94ef-5367-442e-8ae9-e74807a883b6
-const apiAud = requireEnv("NEXT_PUBLIC_ORCH_API_AUDIENCE"); // c5b0049f-737a-4e4c-a302-204f2340de85
+const tenant = requireEnv("NEXT_PUBLIC_B2C_TENANT", process.env.NEXT_PUBLIC_B2C_TENANT); // symfoniab2ctest
+const policy = requireEnv("NEXT_PUBLIC_B2C_POLICY", process.env.NEXT_PUBLIC_B2C_POLICY); // b2c_1a_signup_signin_dev
+const clientId = requireEnv("NEXT_PUBLIC_B2C_CLIENT_ID", process.env.NEXT_PUBLIC_B2C_CLIENT_ID); // a78a94ef-5367-442e-8ae9-e74807a883b6
+const apiAud = requireEnv("NEXT_PUBLIC_ORCH_API_AUDIENCE", process.env.NEXT_PUBLIC_ORCH_API_AUDIENCE); // c5b0049f-737a-4e4c-a302-204f2340de85
 
 // Note (msal-browser v5 deviation, Rule 3): v5 dropped `navigateToLoginRequestUrl`
 // and `storeAuthStateInCookie` from the public TS type defs. Runtime still reads

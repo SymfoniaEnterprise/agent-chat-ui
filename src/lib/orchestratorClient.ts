@@ -24,14 +24,17 @@ import { InteractionRequiredAuthError } from "@azure/msal-browser";
 import { msalInstance, msalReady } from "./msalInstance";
 import { loginRequest } from "./msalConfig";
 
-function requireEnv(name: string): string {
-  const v = process.env[name];
-  if (!v) {
+// Literal property access on process.env is REQUIRED for Next.js to inline
+// NEXT_PUBLIC_* at build time. Dynamic access (process.env[varName]) is NOT
+// inlined -- it returns undefined at runtime in the production server bundle.
+// Hot-fix 2026-05-25 after agent-chat-ui pod logged the throw at SSR.
+function requireEnv(name: string, value: string | undefined): string {
+  if (!value) {
     throw new Error(
       `${name} is not set -- see chat-ui/FORK-NOTES.md for the five required NEXT_PUBLIC_* build args.`,
     );
   }
-  return v;
+  return value;
 }
 
 /** Decode the JWT payload section. Throws on malformed input. */
@@ -110,7 +113,7 @@ export async function chatComplete(model: ChatModel, content: string): Promise<R
     bounceToReLogin();
   }
 
-  const ORCH_URL = requireEnv("NEXT_PUBLIC_ORCH_URL");
+  const ORCH_URL = requireEnv("NEXT_PUBLIC_ORCH_URL", process.env.NEXT_PUBLIC_ORCH_URL);
   const body: ChatRequestBody = { model, messages: [{ role: "user", content }] };
   return fetch(`${ORCH_URL}/v1/chat/completions`, {
     method: "POST",
