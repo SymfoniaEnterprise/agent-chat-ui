@@ -7,6 +7,9 @@ import React, {
 } from "react";
 import { useStream } from "@langchain/langgraph-sdk/react";
 import { type Message } from "@langchain/langgraph-sdk";
+import { InteractionRequiredAuthError } from "@azure/msal-browser";
+import { msalInstance, msalReady } from "@/lib/msalInstance";
+import { apiScope } from "@/lib/msalConfig";
 import {
   uiMessageReducer,
   isUIMessage,
@@ -51,11 +54,13 @@ async function checkGraphStatus(
   apiUrl: string,
   apiKey: string | null,
   authScheme?: string,
+  bearerToken?: string | null,
 ): Promise<boolean> {
   try {
     const headers = new Headers();
     if (apiKey) headers.set("X-Api-Key", apiKey);
     if (authScheme) headers.set("X-Auth-Scheme", authScheme);
+    if (bearerToken) headers.set("Authorization", `Bearer ${bearerToken}`);
 
     const res = await fetch(`${apiUrl}/info`, {
       headers,
@@ -65,6 +70,36 @@ async function checkGraphStatus(
   } catch (e) {
     console.error(e);
     return false;
+  }
+}
+
+// Phase 02 hot-fix 2026-05-25: pull a fresh B2C access_token from MSAL so the
+// upstream langgraph-sdk Client sends `Authorization: Bearer <token>` on every
+// /info, /threads, /runs/stream call. Without this, the upstream Client only
+// sends `X-Api-Key` which the orchestrator's langgraph_shim rejects (it reads
+// Authorization, per orchestrator/langgraph_shim.py:406). Token is captured at
+// mount via acquireTokenSilent; for UAT a single 1h-valid token is enough.
+// On expiry/InteractionRequiredAuthError we clear the active account so
+// LoginGate's ACTIVE_ACCOUNT_CHANGED handler re-renders the Zaloguj button.
+async function getBearerToken(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  await msalReady();
+  const accounts = msalInstance.getAllAccounts();
+  if (accounts.length === 0) return null;
+  const account = msalInstance.getActiveAccount() ?? accounts[0];
+  if (!msalInstance.getActiveAccount()) msalInstance.setActiveAccount(account);
+  try {
+    const result = await msalInstance.acquireTokenSilent({
+      scopes: [apiScope],
+      account,
+    });
+    return result.accessToken;
+  } catch (e) {
+    if (e instanceof InteractionRequiredAuthError) {
+      msalInstance.setActiveAccount(null);
+    }
+    console.error("acquireTokenSilent failed:", e);
+    return null;
   }
 }
 
@@ -83,14 +118,43 @@ const StreamSession = ({
 }) => {
   const [threadId, setThreadId] = useQueryState("threadId");
   const { getThreads, setThreads } = useThreads();
+
+  // Phase 02: fetch the MSAL access_token at mount; useTypedStream takes a
+  // static defaultHeaders snapshot but useStream subscribes to changes via
+  // hook deps, so re-acquiring on tab focus is enough for typical UAT.
+  const [bearerToken, setBearerToken] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getBearerToken().then((t) => {
+      if (!cancelled) setBearerToken(t);
+    });
+    const onFocus = () => {
+      getBearerToken().then((t) => {
+        if (!cancelled) setBearerToken(t);
+      });
+    };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
+
+  // Compose defaultHeaders: Authorization Bearer is the primary auth path
+  // (orchestrator/langgraph_shim reads it). X-Auth-Scheme is preserved for
+  // upstream agent-builder compatibility.
+  const composedDefaultHeaders: Record<string, string> = {};
+  if (bearerToken) composedDefaultHeaders["Authorization"] = `Bearer ${bearerToken}`;
+  if (authScheme) composedDefaultHeaders["X-Auth-Scheme"] = authScheme;
+
   const streamValue = useTypedStream({
     apiUrl,
-    apiKey: apiKey ?? undefined,
+    // Phase 02: apiKey path (X-Api-Key) is unused — orchestrator reads Authorization.
+    // Pass undefined to keep upstream Client from sending the X-Api-Key header at all.
+    apiKey: undefined,
     assistantId,
-    ...(authScheme && {
-      defaultHeaders: {
-        "X-Auth-Scheme": authScheme,
-      },
+    ...(Object.keys(composedDefaultHeaders).length > 0 && {
+      defaultHeaders: composedDefaultHeaders,
     }),
     threadId: threadId ?? null,
     fetchStateHistory: true,
@@ -111,13 +175,17 @@ const StreamSession = ({
   });
 
   useEffect(() => {
-    checkGraphStatus(apiUrl, apiKey, authScheme).then((ok) => {
+    // Only run the connectivity check once we have a token — otherwise the
+    // first render hits /info without Authorization and the toast fires
+    // spuriously before MSAL bootstrap completes.
+    if (!bearerToken) return;
+    checkGraphStatus(apiUrl, apiKey, authScheme, bearerToken).then((ok) => {
       if (!ok) {
         toast.error("Failed to connect to LangGraph server", {
           description: () => (
             <p>
               Please ensure your graph is running at <code>{apiUrl}</code> and
-              your API key is correctly set (if connecting to a deployed graph).
+              you are signed in (the chat-ui needs an MSAL access_token).
             </p>
           ),
           duration: 10000,
@@ -126,7 +194,7 @@ const StreamSession = ({
         });
       }
     });
-  }, [apiKey, apiUrl, authScheme]);
+  }, [apiKey, apiUrl, authScheme, bearerToken]);
 
   return (
     <StreamContext.Provider value={streamValue}>
